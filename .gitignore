@@ -1,0 +1,24 @@
+# Vivado Generated Junk
+*.jou
+*.log
+*.pb
+*.wdb
+*.str
+*.os
+.Xil/
+.ip_user_files/
+
+# Simulation outputs
+sim/*.hex
+sim/*.txt
+
+# Vivado Project Internal Trash (Keep the .xpr, lose the cache)
+vivado_proj/*.cache/
+vivado_proj/*.hw/
+vivado_proj/*.sim/
+vivado_proj/*.runs/
+vivado_proj/*.ip_user_files/
+
+# Python compiled files
+__pycache__/
+*.pyc
