@@ -12,6 +12,8 @@
 sim/*.hex
 sim/*.txt
 
+vivado_proj/
+vivado_proj
 # Vivado Project Internal Trash (Keep the .xpr, lose the cache)
 vivado_proj/*.cache/
 vivado_proj/*.hw/
