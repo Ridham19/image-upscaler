@@ -5,18 +5,15 @@ module bicubic_core #(
 )(
     input  wire                   clk,
     input  wire                   rst,
+    input  wire                   shift_window, // <--- NEW: Controls the pipeline
     
-    // Inputs: Raw bits (No behavioral signed/unsigned keywords)
     input  wire [DATA_WIDTH-1:0]  row0_in, row1_in, row2_in, row3_in,
     input  wire [8:0]             h_w0, h_w1, h_w2, h_w3,
     input  wire [8:0]             v_w0, v_w1, v_w2, v_w3,
-    
     output wire [DATA_WIDTH-1:0]  pixel_out
 );
 
-    // =========================================================================
     // Stage 1: Pipeline Registers (4x4 Pixel Window)
-    // =========================================================================
     reg [7:0] r0_c0, r0_c1, r0_c2, r0_c3;
     reg [7:0] r1_c0, r1_c1, r1_c2, r1_c3;
     reg [7:0] r2_c0, r2_c1, r2_c2, r2_c3;
@@ -28,7 +25,7 @@ module bicubic_core #(
             r1_c0<=0; r1_c1<=0; r1_c2<=0; r1_c3<=0;
             r2_c0<=0; r2_c1<=0; r2_c2<=0; r2_c3<=0;
             r3_c0<=0; r3_c1<=0; r3_c2<=0; r3_c3<=0;
-        end else begin
+        end else if (shift_window) begin // <--- NEW: Only shift on Phase 0!
             r0_c0 <= row0_in; r0_c1 <= r0_c0; r0_c2 <= r0_c1; r0_c3 <= r0_c2;
             r1_c0 <= row1_in; r1_c1 <= r1_c0; r1_c2 <= r1_c1; r1_c3 <= r1_c2;
             r2_c0 <= row2_in; r2_c1 <= r2_c0; r2_c2 <= r2_c1; r2_c3 <= r2_c2;
