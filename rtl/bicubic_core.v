@@ -6,122 +6,77 @@ module bicubic_core #(
     input  wire                   clk,
     input  wire                   rst,
     
-    // Input Pixels: 4 rows from the Line Buffer
-    // These are just single pixels arriving every clock cycle
-    input  wire [DATA_WIDTH-1:0]  row0_in,
-    input  wire [DATA_WIDTH-1:0]  row1_in,
-    input  wire [DATA_WIDTH-1:0]  row2_in,
-    input  wire [DATA_WIDTH-1:0]  row3_in,
+    // Inputs: Raw bits (No behavioral signed/unsigned keywords)
+    input  wire [DATA_WIDTH-1:0]  row0_in, row1_in, row2_in, row3_in,
+    input  wire [8:0]             h_w0, h_w1, h_w2, h_w3,
+    input  wire [8:0]             v_w0, v_w1, v_w2, v_w3,
     
-    // Weights (Coefficients) from the Top Module (LUT)
-    // Format: Signed 9-bit (S1.7). Example: 1.0 = 128
-    // We need separate weights for Horizontal (H) and Vertical (V) phases
-    input  wire signed [8:0]      h_w0, h_w1, h_w2, h_w3,
-    input  wire signed [8:0]      v_w0, v_w1, v_w2, v_w3,
-    
-    // Output Pixel
-    output reg [DATA_WIDTH-1:0]   pixel_out
+    output wire [DATA_WIDTH-1:0]  pixel_out
 );
 
     // =========================================================================
-    // Stage 1: Create the 4x4 Window (Shift Registers)
-    // We need to see 4 columns (Previous, Current, Next, Next+1)
+    // Stage 1: Pipeline Registers (4x4 Pixel Window)
     // =========================================================================
-    reg [DATA_WIDTH-1:0] r0_c0, r0_c1, r0_c2, r0_c3;
-    reg [DATA_WIDTH-1:0] r1_c0, r1_c1, r1_c2, r1_c3;
-    reg [DATA_WIDTH-1:0] r2_c0, r2_c1, r2_c2, r2_c3;
-    reg [DATA_WIDTH-1:0] r3_c0, r3_c1, r3_c2, r3_c3;
+    reg [7:0] r0_c0, r0_c1, r0_c2, r0_c3;
+    reg [7:0] r1_c0, r1_c1, r1_c2, r1_c3;
+    reg [7:0] r2_c0, r2_c1, r2_c2, r2_c3;
+    reg [7:0] r3_c0, r3_c1, r3_c2, r3_c3;
 
     always @(posedge clk) begin
         if (rst) begin
-            // Reset all to 0
-            r0_c0 <= 0; r0_c1 <= 0; r0_c2 <= 0; r0_c3 <= 0;
-            r1_c0 <= 0; r1_c1 <= 0; r1_c2 <= 0; r1_c3 <= 0;
-            r2_c0 <= 0; r2_c1 <= 0; r2_c2 <= 0; r2_c3 <= 0;
-            r3_c0 <= 0; r3_c1 <= 0; r3_c2 <= 0; r3_c3 <= 0;
+            r0_c0<=0; r0_c1<=0; r0_c2<=0; r0_c3<=0;
+            r1_c0<=0; r1_c1<=0; r1_c2<=0; r1_c3<=0;
+            r2_c0<=0; r2_c1<=0; r2_c2<=0; r2_c3<=0;
+            r3_c0<=0; r3_c1<=0; r3_c2<=0; r3_c3<=0;
         end else begin
-            // Shift pipeline for Row 0
-            r0_c0 <= row0_in; // Newest pixel
-            r0_c1 <= r0_c0;
-            r0_c2 <= r0_c1;
-            r0_c3 <= r0_c2;   // Oldest pixel
-            
-            // Shift pipeline for Row 1
+            r0_c0 <= row0_in; r0_c1 <= r0_c0; r0_c2 <= r0_c1; r0_c3 <= r0_c2;
             r1_c0 <= row1_in; r1_c1 <= r1_c0; r1_c2 <= r1_c1; r1_c3 <= r1_c2;
-            
-            // Shift pipeline for Row 2
-            r2_c0 <= row2_in; r2_c1 <= r2_c0; r2_c2 <= r2_c1; r3_c3 <= r2_c2; // Typo fix: r2_c3 <= r2_c2
-            r2_c3 <= r2_c2; // Corrected line
-            
-            // Shift pipeline for Row 3
+            r2_c0 <= row2_in; r2_c1 <= r2_c0; r2_c2 <= r2_c1; r2_c3 <= r2_c2;
             r3_c0 <= row3_in; r3_c1 <= r3_c0; r3_c2 <= r3_c1; r3_c3 <= r3_c2;
         end
     end
 
     // =========================================================================
-    // Stage 2: Horizontal Interpolation (Calculating Intermediate Rows)
-    // Formula: (P0*W0 + P1*W1 + P2*W2 + P3*W3)
+    // Stage 2: Structural Horizontal Pass
     // =========================================================================
-    
-    // Function to calculate dot product for one row
-    // We make this automatic to avoid writing it 4 times
-    function signed [19:0] interpolate_row;
-        input [7:0] p0, p1, p2, p3;
-        input signed [8:0] w0, w1, w2, w3;
-        begin
-            // Pixel (unsigned) * Weight (signed)
-            // Result needs to be large enough to hold the sum
-            interpolate_row = ($signed({1'b0, p0}) * w0) + 
-                              ($signed({1'b0, p1}) * w1) + 
-                              ($signed({1'b0, p2}) * w2) + 
-                              ($signed({1'b0, p3}) * w3);
+    wire [19:0] h_raw_0, h_raw_1, h_raw_2, h_raw_3;
+    wire [7:0]  h_norm_0, h_norm_1, h_norm_2, h_norm_3;
+
+    // 4x Dot Product Units
+    dot_product_4 dp_h0 (.p0(r0_c3), .p1(r0_c2), .p2(r0_c1), .p3(r0_c0), .w0(h_w0), .w1(h_w1), .w2(h_w2), .w3(h_w3), .result(h_raw_0));
+    dot_product_4 dp_h1 (.p0(r1_c3), .p1(r1_c2), .p2(r1_c1), .p3(r1_c0), .w0(h_w0), .w1(h_w1), .w2(h_w2), .w3(h_w3), .result(h_raw_1));
+    dot_product_4 dp_h2 (.p0(r2_c3), .p1(r2_c2), .p2(r2_c1), .p3(r2_c0), .w0(h_w0), .w1(h_w1), .w2(h_w2), .w3(h_w3), .result(h_raw_2));
+    dot_product_4 dp_h3 (.p0(r3_c3), .p1(r3_c2), .p2(r3_c1), .p3(r3_c0), .w0(h_w0), .w1(h_w1), .w2(h_w2), .w3(h_w3), .result(h_raw_3));
+
+    // 4x Clippers (Normalize to 8-bit before Vertical Pass)
+    pixel_clipper clip_h0 (.in_val(h_raw_0), .out_pixel(h_norm_0));
+    pixel_clipper clip_h1 (.in_val(h_raw_1), .out_pixel(h_norm_1));
+    pixel_clipper clip_h2 (.in_val(h_raw_2), .out_pixel(h_norm_2));
+    pixel_clipper clip_h3 (.in_val(h_raw_3), .out_pixel(h_norm_3));
+
+    // Pipeline Register to stabilize timing between H and V passes
+    reg [7:0] v_in_0, v_in_1, v_in_2, v_in_3;
+    always @(posedge clk) begin
+        if (rst) begin
+            v_in_0 <= 0; v_in_1 <= 0; v_in_2 <= 0; v_in_3 <= 0;
+        end else begin
+            v_in_0 <= h_norm_0;
+            v_in_1 <= h_norm_1;
+            v_in_2 <= h_norm_2;
+            v_in_3 <= h_norm_3;
         end
-    endfunction
-
-    reg signed [19:0] h_res_0, h_res_1, h_res_2, h_res_3;
-
-    always @(posedge clk) begin
-        // Perform horizontal interpolation for all 4 rows in parallel
-        h_res_0 <= interpolate_row(r0_c3, r0_c2, r0_c1, r0_c0, h_w0, h_w1, h_w2, h_w3);
-        h_res_1 <= interpolate_row(r1_c3, r1_c2, r1_c1, r1_c0, h_w0, h_w1, h_w2, h_w3);
-        h_res_2 <= interpolate_row(r2_c3, r2_c2, r2_c1, r2_c0, h_w0, h_w1, h_w2, h_w3);
-        h_res_3 <= interpolate_row(r3_c3, r3_c2, r3_c1, r3_c0, h_w0, h_w1, h_w2, h_w3);
     end
 
     // =========================================================================
-    // Stage 3: Vertical Interpolation (The Final Value)
-    // Now we take the 4 Horizontal results and combine them vertically
+    // Stage 3: Structural Vertical Pass & Final Output
     // =========================================================================
-    reg signed [19:0] v_final_sum;
+    wire [19:0] v_raw_final;
     
-    always @(posedge clk) begin
-        // Note: We need to normalize the Horizontal results first (divide by 128)
-        // Or we can just sum everything and divide by 128*128 at the end.
-        // Let's divide by 128 (shift 7) now to keep numbers smaller.
-        
-        v_final_sum <= ( (h_res_0 >>> 7) * v_w0 ) + 
-                       ( (h_res_1 >>> 7) * v_w1 ) + 
-                       ( (h_res_2 >>> 7) * v_w2 ) + 
-                       ( (h_res_3 >>> 7) * v_w3 );
-    end
+    // 1x Dot Product Unit
+    dot_product_4 dp_v (.p0(v_in_3), .p1(v_in_2), .p2(v_in_1), .p3(v_in_0), .w0(v_w0), .w1(v_w1), .w2(v_w2), .w3(v_w3), .result(v_raw_final));
 
-    // =========================================================================
-    // Stage 4: Rounding, Normalization and Clipping
-    // =========================================================================
-    reg signed [19:0] result_normalized;
-    
-    always @(*) begin
-        // We multiplied by 128 twice (Horizontal and Vertical), so we divide by 128 again.
-        // Total scale factor was 128*128. We shifted once already. Shift 7 more bits.
-        result_normalized = v_final_sum >>> 7;
-        
-        // CLIPPER: Handle overshoots (Negative numbers or > 255)
-        if (result_normalized < 0)
-            pixel_out = 8'd0;
-        else if (result_normalized > 255)
-            pixel_out = 8'd255;
-        else
-            pixel_out = result_normalized[7:0];
-    end
+    // 1x Clipper (Final Output)
+    // Note: In top_upscaler.v, you must change 'output reg' to 'output wire' since this is driven by continuous assignment
+    pixel_clipper clip_final (.in_val(v_raw_final), .out_pixel(pixel_out));
 
 endmodule

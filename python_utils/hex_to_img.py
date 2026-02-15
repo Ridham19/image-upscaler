@@ -24,7 +24,11 @@ def hex_to_img():
         for line in f:
             line = line.strip()
             if line:
-                pixels.append(int(line, 16))
+                # If Verilog spit out 'xx' or 'XX', treat it as a black pixel (0)
+                if 'x' in line.lower():
+                    pixels.append(0)
+                else:
+                    pixels.append(int(line, 16))
 
     # Convert to Numpy Array
     arr = np.array(pixels, dtype=np.uint8)

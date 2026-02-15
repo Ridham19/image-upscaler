@@ -26,7 +26,7 @@ module top_upscaler #(
     initial begin
         // Load the weights we generated in Python/C++
         // This file must be in the simulation folder for Vivado to find it
-        $readmemh("coeffs.txt", coeff_rom);
+        $readmemh("D:/vivado_projects/image_upscale/sim/coeffs.txt", coeff_rom);
     end
 
     // =========================================================================

@@ -49,7 +49,7 @@ module tb_upscaler;
     // 4. Capture Output Process
     // =========================================================================
     initial begin
-        f_out = $fopen("output_image.hex", "w"); // Will be created in sim folder
+        f_out = $fopen("D:/vivado_projects/image_upscale/sim/output_image.hex", "w"); // Will be created in sim folder
     end
 
     always @(posedge clk) begin
@@ -74,7 +74,7 @@ module tb_upscaler;
         // Open Input File (Ensure this path matches where Python saved it!)
         // Note: In Vivado Simulation, just the filename usually works if it's added to sources.
         // If it fails, use the absolute path.
-        f_in = $fopen("input_image.hex", "r");
+        f_in = $fopen("D:/vivado_projects/image_upscale/sim/input_image.hex", "r");
         
         if (f_in == 0) begin
             $display("ERROR: Could not open input_image.hex");
