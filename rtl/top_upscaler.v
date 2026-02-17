@@ -1,44 +1,52 @@
 `timescale 1ns / 1ps
 
 module top_upscaler #(
-    parameter IMG_W = 384,      
+    parameter IMG_W = 384, // FIXED RESOLUTION!     
     parameter IMG_H = 216        
 )(
     input  wire        clk,
     input  wire        rst,
-    input  wire [23:0] pixel_in,   // 24-bit RGB
+    input  wire [23:0] pixel_in,   
     input  wire        input_valid,
-    output wire [23:0] pixel_out,  // 24-bit RGB
-    output reg         output_valid
+    output wire [23:0] pixel_out,  
+    output wire        output_valid  // Changed to 'wire' for structural output
 );
 
     reg signed [8:0] coeff_rom [0:11];
     initial $readmemh("D:/vivado_projects/image_upscale/sim/coeffs.txt", coeff_rom);
 
-    reg [1:0] h_phase, v_phase;
+    // =========================================================================
+    // 1. Structural Gate-Level Phase Counters
+    // =========================================================================
+    wire [1:0] h_phase;
+    wire [1:0] v_phase = 2'b00; // Hardwired to 0 for this testbench setup
+    
+    // Instantiate our custom raw-gate Mod-3 counter
+    mod3_counter h_counter (
+        .clk(clk),
+        .rst(rst),
+        .en(input_valid),
+        .count(h_phase)
+    );
 
-    always @(posedge clk) begin
-        if (rst) begin
-            h_phase <= 0; v_phase <= 0;
-        end else if (input_valid) begin
-            if (h_phase == 2) h_phase <= 0;
-            else h_phase <= h_phase + 1;
-        end
-    end
-
-    // FIX: Shift the memory on the LAST phase, so the new pixel is ready exactly for Phase 0!
+    // FIX: Shift the memory exactly on the LAST phase (2'b10), 
+    // so the new pixel is ready for Phase 0!
     wire shift_enable = input_valid && (h_phase == 2'b10);
 
+    // =========================================================================
+    // 2. Line Buffer
+    // =========================================================================
     wire [23:0] r0, r1, r2, r3;
     line_buffer #(.DATA_WIDTH(24), .IMG_WIDTH(IMG_W)) lb_inst (
         .clk(clk), .rst(rst), .ce(shift_enable),
         .din(pixel_in), .dout_0(r0), .dout_1(r1), .dout_2(r2), .dout_3(r3)
     );
 
+    // =========================================================================
+    // 3. Combinational Weight Lookup (Hardware MUX routing)
+    // =========================================================================
     reg signed [8:0] h_w0, h_w1, h_w2, h_w3;
     reg signed [8:0] v_w0, v_w1, v_w2, v_w3;
-    
-    // FIX: Use current h_phase for Horizontal lookup (perfect alignment)
     always @(*) begin
         h_w0 = coeff_rom[{h_phase, 2'b00}]; h_w1 = coeff_rom[{h_phase, 2'b01}];
         h_w2 = coeff_rom[{h_phase, 2'b10}]; h_w3 = coeff_rom[{h_phase, 2'b11}];
@@ -46,7 +54,9 @@ module top_upscaler #(
         v_w2 = coeff_rom[{v_phase, 2'b10}]; v_w3 = coeff_rom[{v_phase, 2'b11}]; 
     end
 
-    // 3 Parallel Hardware Cores
+    // =========================================================================
+    // 4. Parallel Structural Hardware Cores
+    // =========================================================================
     wire [7:0] out_r, out_g, out_b;
     
     bicubic_core core_R (.clk(clk), .rst(rst), .shift_window(shift_enable),
@@ -63,11 +73,13 @@ module top_upscaler #(
 
     assign pixel_out = {out_r, out_g, out_b};
 
-    reg [1:0] valid_pipe;
-    always @(posedge clk) begin
-        if (rst) valid_pipe <= 0;
-        else valid_pipe <= {valid_pipe[0], input_valid};
-    end
-    always @(*) output_valid = valid_pipe[1];
+    // =========================================================================
+    // 5. Structural Output Valid Pipeline (Built from RAW DFFs)
+    // =========================================================================
+    wire valid_pipe_0;
+    
+    // Chain 2 D-Flip-Flops to match the 2-cycle latency of the Math Core
+    dff ff_vpipe0 (.clk(clk), .rst(rst), .d(input_valid), .q(valid_pipe_0));
+    dff ff_vpipe1 (.clk(clk), .rst(rst), .d(valid_pipe_0), .q(output_valid));
 
 endmodule

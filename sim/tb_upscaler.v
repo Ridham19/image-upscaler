@@ -2,6 +2,7 @@
 
 module tb_upscaler;
 
+    // 1. Updated for the new High-Res Input!
     parameter IMG_W = 384;
     parameter IMG_H = 216;
     parameter SCALE = 3;
@@ -22,6 +23,22 @@ module tb_upscaler;
         .pixel_out(pixel_out), .output_valid(output_valid)
     );
 
+    // =========================================================================
+    // 2. THE AUTO-PAUSE BLOCK (Fixes the Vivado 1000ns Issue)
+    // =========================================================================
+    initial begin
+        #1; // Pause at 500ns (Safely before Vivado's 1000ns limit)
+        $display("\n=======================================================");
+        $display(" SIMULATION PAUSED AT 500ns.");
+        $display(" Click 'Run All' in the top toolbar (or type 'run all')");
+        $display(" to process the full 384x216 image!");
+        $display("=======================================================\n");
+        $stop; // Physically halts the simulator here
+    end
+
+    // =========================================================================
+    // 3. Output Capture
+    // =========================================================================
     initial f_out = $fopen("D:/vivado_projects/image_upscale/sim/output_image.hex", "w");
 
     always @(posedge clk) begin
@@ -34,15 +51,21 @@ module tb_upscaler;
         end
     end
 
+    // =========================================================================
+    // 4. Main Stimulus
+    // =========================================================================
     reg [23:0] row_buffer [0:IMG_W-1];
     
     initial begin
         clk = 0; rst = 1; pixel_in = 0; input_valid = 0;
         f_in = $fopen("D:/vivado_projects/image_upscale/sim/input_image.hex", "r");
+        
+        // Wait for global reset
         #120; rst = 0; #20;
 
         for (i = 0; i < IMG_H; i = i + 1) begin
-            // Progress tracker! Check Tcl Console for this!
+            
+            // Progress tracker so you know it hasn't crashed!
             if (i % 10 == 0) $display("Processing Row %0d / %0d...", i, IMG_H);
             
             for (j = 0; j < IMG_W; j = j + 1) scan_res = $fscanf(f_in, "%h\n", row_buffer[j]);
@@ -60,10 +83,13 @@ module tb_upscaler;
             end
         end
 
+        // Wait for the final pixels to flush out of the pipeline
         #1000;
         $fclose(f_in);
         $fclose(f_out);
-        $display("SUCCESS: Simulation Complete. Output saved!");
+        $display("\n=======================================================");
+        $display(" SUCCESS: Simulation Complete. Output saved!");
+        $display("=======================================================\n");
         $finish;
     end
 endmodule
