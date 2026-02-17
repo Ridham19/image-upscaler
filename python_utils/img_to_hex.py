@@ -3,7 +3,7 @@ import numpy as np
 import os
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-INPUT_IMAGE_PATH = os.path.join(SCRIPT_DIR, "images/image.png") 
+INPUT_IMAGE_PATH = os.path.join(SCRIPT_DIR, "images/cat.png") 
 OUTPUT_DIR = os.path.join(SCRIPT_DIR, "../sim")
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "input_image.hex")
 

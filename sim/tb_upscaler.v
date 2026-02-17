@@ -2,8 +2,7 @@
 
 module tb_upscaler;
 
-    // 1. Updated for the new High-Res Input!
-    parameter IMG_W = 384;
+    parameter IMG_W = 384;   // UPDATED RESOLUTION
     parameter IMG_H = 216;
     parameter SCALE = 3;
     
@@ -24,51 +23,69 @@ module tb_upscaler;
     );
 
     // =========================================================================
-    // 2. THE AUTO-PAUSE BLOCK (Fixes the Vivado 1000ns Issue)
+    // AUTO-PAUSE LOGIC
     // =========================================================================
     initial begin
-        #1; // Pause at 500ns (Safely before Vivado's 1000ns limit)
+        #500;
         $display("\n=======================================================");
         $display(" SIMULATION PAUSED AT 500ns.");
-        $display(" Click 'Run All' in the top toolbar (or type 'run all')");
-        $display(" to process the full 384x216 image!");
+        $display(" Click 'Run All' in the top toolbar to process image!");
         $display("=======================================================\n");
-        $stop; // Physically halts the simulator here
+        $stop; 
     end
 
     // =========================================================================
-    // 3. Output Capture
+    // OUTPUT CAPTURE & FILE CHECK
     // =========================================================================
-    initial f_out = $fopen("D:/vivado_projects/image_upscale/sim/output_image.hex", "w");
+    initial begin
+        // NOTE: Check this path!
+        f_out = $fopen("D:/vivado_projects/image_upscale/sim/output_image.hex", "w");
+        if (f_out == 0) $display("\n? FATAL ERROR: COULD NOT OPEN output_image.hex FOR WRITING!\n");
+    end
 
     always @(posedge clk) begin
         if (output_valid) begin
             if (^pixel_out === 1'bx) begin
-                $fwrite(f_out, "000000\n"); // Force Pipeline XX to Black
+                $fwrite(f_out, "000000\n"); 
             end else begin
-                $fwrite(f_out, "%06x\n", pixel_out); // Write 24-bit Hex
+                $fwrite(f_out, "%06x\n", pixel_out); 
             end
         end
     end
 
     // =========================================================================
-    // 4. Main Stimulus
+    // MAIN STIMULUS & FILE CHECK
     // =========================================================================
     reg [23:0] row_buffer [0:IMG_W-1];
     
     initial begin
         clk = 0; rst = 1; pixel_in = 0; input_valid = 0;
+        
+        // NOTE: Check this path! Does it match your GitHub folder?
         f_in = $fopen("D:/vivado_projects/image_upscale/sim/input_image.hex", "r");
         
-        // Wait for global reset
+        if (f_in == 0) begin
+            $display("\n=======================================================");
+            $display(" ? FATAL ERROR: COULD NOT OPEN input_image.hex!");
+            $display(" Check if the path is correct and img_to_hex.py was run.");
+            $display("=======================================================\n");
+            $finish; // KILL SIMULATION INSTANTLY
+        end
+        
         #120; rst = 0; #20;
 
         for (i = 0; i < IMG_H; i = i + 1) begin
-            
-            // Progress tracker so you know it hasn't crashed!
             if (i % 10 == 0) $display("Processing Row %0d / %0d...", i, IMG_H);
             
-            for (j = 0; j < IMG_W; j = j + 1) scan_res = $fscanf(f_in, "%h\n", row_buffer[j]);
+            for (j = 0; j < IMG_W; j = j + 1) begin
+                scan_res = $fscanf(f_in, "%h\n", row_buffer[j]);
+                
+                if (scan_res == 0 || scan_res == -1) begin
+                    $display("\n? FATAL ERROR: Failed to read pixel at Row %0d, Col %0d!", i, j);
+                    $display("The input_image.hex file is empty or smaller than 384x216.\n");
+                    $finish; // KILL SIMULATION INSTANTLY
+                end
+            end
 
             for (k = 0; k < SCALE; k = k + 1) begin
                 for (j = 0; j < IMG_W; j = j + 1) begin
@@ -83,7 +100,6 @@ module tb_upscaler;
             end
         end
 
-        // Wait for the final pixels to flush out of the pipeline
         #1000;
         $fclose(f_in);
         $fclose(f_out);
