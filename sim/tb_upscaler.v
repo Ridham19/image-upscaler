@@ -2,8 +2,8 @@
 
 module tb_upscaler;
 
-    parameter IMG_W = 128;
-    parameter IMG_H = 72;
+    parameter IMG_W = 384;
+    parameter IMG_H = 216;
     parameter SCALE = 3;
     
     reg clk;

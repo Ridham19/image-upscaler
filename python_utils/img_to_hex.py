@@ -3,11 +3,14 @@ import numpy as np
 import os
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-INPUT_IMAGE_PATH = os.path.join(SCRIPT_DIR, "images/img2.png") 
+INPUT_IMAGE_PATH = os.path.join(SCRIPT_DIR, "images/image.png") 
 OUTPUT_DIR = os.path.join(SCRIPT_DIR, "../sim")
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "input_image.hex")
 
-TARGET_W, TARGET_H = 128, 72
+# Added a path for the preview image
+PREVIEW_FILE = os.path.join(SCRIPT_DIR, "input_preview.png") 
+
+TARGET_W, TARGET_H = 384, 216
 
 def convert_image():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -18,6 +21,12 @@ def convert_image():
         return
         
     img = cv2.resize(img, (TARGET_W, TARGET_H))
+    
+    # --- ADDED THIS SECTION TO SAVE THE IMAGE ---
+    cv2.imwrite(PREVIEW_FILE, img)
+    print(f"Saved input preview to: {os.path.abspath(PREVIEW_FILE)}")
+    # --------------------------------------------
+    
     print(f"Converting {TARGET_W}x{TARGET_H} RGB image to 24-bit Hex...")
     
     with open(OUTPUT_FILE, "w") as f:
@@ -27,7 +36,7 @@ def convert_image():
                 # Pack as RRGGBB (24 bits = 6 Hex characters)
                 f.write(f"{r:02X}{g:02X}{b:02X}\n")
     
-    print(f"Success! Saved to {os.path.abspath(OUTPUT_FILE)}")
+    print(f"Success! Saved Hex to {os.path.abspath(OUTPUT_FILE)}")
 
 if __name__ == "__main__":
     convert_image()

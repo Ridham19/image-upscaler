@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 import os
 
-OUTPUT_W, OUTPUT_H = 128 * 3, 72 * 3
+OUTPUT_W, OUTPUT_H = 384 * 3, 216 * 3
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 HEX_FILE = os.path.join(SCRIPT_DIR, "../sim/output_image.hex")
 RESULT_IMG = os.path.join(SCRIPT_DIR, "final_result.png")

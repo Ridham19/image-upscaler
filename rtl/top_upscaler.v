@@ -1,8 +1,8 @@
 `timescale 1ns / 1ps
 
 module top_upscaler #(
-    parameter IMG_W = 128,      
-    parameter IMG_H = 72        
+    parameter IMG_W = 384,      
+    parameter IMG_H = 216        
 )(
     input  wire        clk,
     input  wire        rst,
@@ -16,6 +16,7 @@ module top_upscaler #(
     initial $readmemh("D:/vivado_projects/image_upscale/sim/coeffs.txt", coeff_rom);
 
     reg [1:0] h_phase, v_phase;
+
     always @(posedge clk) begin
         if (rst) begin
             h_phase <= 0; v_phase <= 0;
@@ -25,8 +26,8 @@ module top_upscaler #(
         end
     end
 
-    // Master Shift Control
-    wire shift_enable = input_valid && (h_phase == 2'b00);
+    // FIX: Shift the memory on the LAST phase, so the new pixel is ready exactly for Phase 0!
+    wire shift_enable = input_valid && (h_phase == 2'b10);
 
     wire [23:0] r0, r1, r2, r3;
     line_buffer #(.DATA_WIDTH(24), .IMG_WIDTH(IMG_W)) lb_inst (
@@ -36,6 +37,8 @@ module top_upscaler #(
 
     reg signed [8:0] h_w0, h_w1, h_w2, h_w3;
     reg signed [8:0] v_w0, v_w1, v_w2, v_w3;
+    
+    // FIX: Use current h_phase for Horizontal lookup (perfect alignment)
     always @(*) begin
         h_w0 = coeff_rom[{h_phase, 2'b00}]; h_w1 = coeff_rom[{h_phase, 2'b01}];
         h_w2 = coeff_rom[{h_phase, 2'b10}]; h_w3 = coeff_rom[{h_phase, 2'b11}];
@@ -43,7 +46,7 @@ module top_upscaler #(
         v_w2 = coeff_rom[{v_phase, 2'b10}]; v_w3 = coeff_rom[{v_phase, 2'b11}]; 
     end
 
-    // 3 Parallel Hardware Cores!
+    // 3 Parallel Hardware Cores
     wire [7:0] out_r, out_g, out_b;
     
     bicubic_core core_R (.clk(clk), .rst(rst), .shift_window(shift_enable),
@@ -60,7 +63,6 @@ module top_upscaler #(
 
     assign pixel_out = {out_r, out_g, out_b};
 
-    // Match 2-cycle latency of structural core
     reg [1:0] valid_pipe;
     always @(posedge clk) begin
         if (rst) valid_pipe <= 0;
