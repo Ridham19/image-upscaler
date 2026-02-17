@@ -9,8 +9,8 @@
 .ip_user_files/
 
 # Simulation outputs
-sim/*.hex
-sim/*.txt
+# sim/*.hex
+# sim/*.txt
 
 vivado_proj/
 vivado_proj
