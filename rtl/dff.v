@@ -1,4 +1,4 @@
-`timescale 1ns / 1ps
+`timescale 1ns / 1ns
 
 // =========================================================================
 // 1. Structural D-Latch (Built purely from NAND gates)

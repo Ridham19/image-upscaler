@@ -1,4 +1,4 @@
-`timescale 1ns / 1ps
+`timescale 1ns / 1ns
 
 module top_upscaler #(
     parameter IMG_W = 384,      // UPDATED RESOLUTION

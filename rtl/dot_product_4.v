@@ -1,4 +1,4 @@
-`timescale 1ns / 1ps
+`timescale 1ns / 1ns
 
 module dot_product_4 (
     input  wire [7:0]  p0, p1, p2, p3,       // 8-bit Unsigned Pixels

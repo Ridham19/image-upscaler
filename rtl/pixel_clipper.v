@@ -1,4 +1,4 @@
-`timescale 1ns / 1ps
+`timescale 1ns / 1ns
 
 module pixel_clipper (
     input  wire [19:0] in_val,     // 20-bit 2's complement input

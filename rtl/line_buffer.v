@@ -1,80 +1,108 @@
-`timescale 1ns / 1ps
+`timescale 1ns / 1ns
+
+module reg_en #(
+    parameter WIDTH = 8
+)(
+    input  wire             clk,
+    input  wire             rst,
+    input  wire             en,
+    input  wire [WIDTH-1:0] d,
+    output wire [WIDTH-1:0] q
+);
+    genvar i;
+    generate
+        for (i = 0; i < WIDTH; i = i + 1) begin : bit_loop
+            wire d_next;
+            // Your custom raw-gate MUX and DFF
+            mux2 m (.d0(q[i]), .d1(d[i]), .s(en), .y(d_next));
+            dff  f (.clk(clk), .rst(rst), .d(d_next), .q(q[i]));
+        end
+    endgenerate
+endmodule
+
+module row_shift_register #(
+    parameter DATA_WIDTH = 24,
+    parameter IMG_WIDTH  = 384
+)(
+    input  wire                  clk,
+    input  wire                  rst,
+    input  wire                  ce,
+    input  wire [DATA_WIDTH-1:0] din,
+    output wire [DATA_WIDTH-1:0] dout
+);
+    // Wire array to connect the Q of one register to the D of the next
+    wire [DATA_WIDTH-1:0] tap [0:IMG_WIDTH];
+
+    // Input goes to the first tap
+    assign tap[0] = din;
+
+    genvar i;
+    generate
+        for (i = 0; i < IMG_WIDTH; i = i + 1) begin : shift_loop
+            reg_en #(
+                .WIDTH(DATA_WIDTH)
+            ) r_inst (
+                .clk(clk),
+                .rst(rst),
+                .en(ce),
+                .d(tap[i]),       // Connects to previous register
+                .q(tap[i+1])      // Outputs to next register
+            );
+        end
+    endgenerate
+
+    // The output is the very last wire in the chain
+    assign dout = tap[IMG_WIDTH];
+
+endmodule
+
 
 module line_buffer #(
-    parameter DATA_WIDTH = 8,      // 8-bit pixels
-    parameter IMG_WIDTH  = 128     // CHANGE THIS to match your simulation target
+    parameter DATA_WIDTH = 8,
+    parameter IMG_WIDTH  = 128
 )(
     input  wire                   clk,
     input  wire                   rst,
-    input  wire                   ce,         // Clock Enable (only shift when new data arrives)
-    input  wire [DATA_WIDTH-1:0]  din,        // New incoming pixel
+    input  wire                   ce,
+    input  wire [DATA_WIDTH-1:0]  din,
     
-    // Outputs: The same column across 4 vertical rows
-    output wire [DATA_WIDTH-1:0]  dout_0,     // Current Row (Newest)
-    output wire [DATA_WIDTH-1:0]  dout_1,     // Row - 1
-    output wire [DATA_WIDTH-1:0]  dout_2,     // Row - 2
-    output wire [DATA_WIDTH-1:0]  dout_3      // Row - 3 (Oldest)
+    output wire [DATA_WIDTH-1:0]  dout_0,
+    output wire [DATA_WIDTH-1:0]  dout_1,
+    output wire [DATA_WIDTH-1:0]  dout_2,
+    output wire [DATA_WIDTH-1:0]  dout_3
 );
 
-    // =========================================================================
-    // Internal Memory (RAM) to store the lines
-    // We need 3 buffers to store 3 full previous rows.
-    // The "Current Row" (dout_0) is just the input passing through.
-    // =========================================================================
-    
-    // In simulation/small FPGAs, these will synthesize as Distributed RAM (LUTs).
-    // In large images (1080p), Vivado will automatically map these to Block RAM (BRAM).
-    
-    reg [DATA_WIDTH-1:0] line_ram_0 [0:IMG_WIDTH-1];
-    reg [DATA_WIDTH-1:0] line_ram_1 [0:IMG_WIDTH-1];
-    reg [DATA_WIDTH-1:0] line_ram_2 [0:IMG_WIDTH-1];
-    
-    // Read Pointers (Counters to know which pixel to read/write)
-    reg [$clog2(IMG_WIDTH)-1:0] wr_ptr;
-    
-    // Output Registers to keep signals stable
-    reg [DATA_WIDTH-1:0] r_dout_1;
-    reg [DATA_WIDTH-1:0] r_dout_2;
-    reg [DATA_WIDTH-1:0] r_dout_3;
-
-    // =========================================================================
-    // Logic
-    // =========================================================================
-    always @(posedge clk) begin
-        if (rst) begin
-            wr_ptr <= 0;
-            r_dout_1 <= 0;
-            r_dout_2 <= 0;
-            r_dout_3 <= 0;
-        end 
-        else if (ce) begin
-            // 1. READ old data from the buffers (before overwriting it)
-            // This retrieves the pixel from the SAME column but previous rows
-            r_dout_1 <= line_ram_0[wr_ptr];
-            r_dout_2 <= line_ram_1[wr_ptr];
-            r_dout_3 <= line_ram_2[wr_ptr];
-            
-            // 2. WRITE new data into the buffers
-            // The input 'din' goes into Buffer 0
-            // The output of Buffer 0 goes into Buffer 1 (Cascading)
-            line_ram_0[wr_ptr] <= din;
-            line_ram_1[wr_ptr] <= r_dout_1; // Shift row 1 down to row 2
-            line_ram_2[wr_ptr] <= r_dout_2; // Shift row 2 down to row 3
-            
-            // 3. Increment Pointer (Circular Buffer)
-            if (wr_ptr == IMG_WIDTH - 1)
-                wr_ptr <= 0;
-            else
-                wr_ptr <= wr_ptr + 1;
-        end
-    end
-
-    // Direct assignment for the current row (No delay needed)
+    // Current Row is a direct wire connection
     assign dout_0 = din;
-    
-    // Assign stored values to outputs
-    assign dout_1 = r_dout_1;
-    assign dout_2 = r_dout_2;
-    assign dout_3 = r_dout_3;
+
+    // Row 1: Delays 'din' by 1 full image width
+    row_shift_register #(
+        .DATA_WIDTH(DATA_WIDTH), 
+        .IMG_WIDTH(IMG_WIDTH)
+    ) row1 (
+        .clk(clk), .rst(rst), .ce(ce),
+        .din(dout_0), 
+        .dout(dout_1)
+    );
+
+    // Row 2: Delays Row 1 by another full image width
+    row_shift_register #(
+        .DATA_WIDTH(DATA_WIDTH), 
+        .IMG_WIDTH(IMG_WIDTH)
+    ) row2 (
+        .clk(clk), .rst(rst), .ce(ce),
+        .din(dout_1), 
+        .dout(dout_2)
+    );
+
+    // Row 3: Delays Row 2 by another full image width
+    row_shift_register #(
+        .DATA_WIDTH(DATA_WIDTH), 
+        .IMG_WIDTH(IMG_WIDTH)
+    ) row3 (
+        .clk(clk), .rst(rst), .ce(ce),
+        .din(dout_2), 
+        .dout(dout_3)
+    );
 
 endmodule
